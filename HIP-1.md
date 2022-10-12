@@ -32,8 +32,7 @@ Some possible ISMs:
 
 - Multisig: Given a message, specifies a set of signers and a threshold that need to have signed `_root` in order to accept a message. Note that the set and threshold can vary based on message content.
 - Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
-- ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol,
-  with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
+- ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
 - Routing: Routes messages to one or more other `ISMs` according to their content.
 
 Individual `ISM` specifications should follow in future HIPs.
@@ -43,6 +42,12 @@ interface IInterchainMessageRecipient {
     // Returns the recipient's ISM, which checks the validity
     // of interchain messages.
     function interchainSecurityModule() external view returns (IInterchainSecurityModule);
+
+    function handle(
+        uint32 _origin,
+        bytes32 _sender,
+        bytes calldata _payload
+    ) external;
 }
 
 interface IInterchainSecurityModule {
@@ -56,7 +61,6 @@ interface IInterchainSecurityModule {
     // is valid to verify proofs against.
     function accept(
         bytes32 _root,
-        uint256 _index,
         bytes calldata _message,
         bytes calldata _data
     ) external returns (bool);
@@ -70,7 +74,6 @@ interface IInbox {
     // calling `recipient.handle()`.
     function process(
         bytes32 _root,
-        uint256 _index,
         bytes32[32] calldata _proof,
         bytes calldata _message,
         bytes calldata _data
@@ -81,23 +84,63 @@ interface IInbox {
 ### **Rationale**
 
 Sovereign consensus allows for a modular approach to interchain security.
-This allows the core protocol to be forward compatible, ensuring that Hyperlane
-can support new security models as they are developed.
-Furthermore, it allows applications to select, configure, or invent security models
-that offer the most appropriate tradeoffs.
+This allows the core protocol to be forward compatible, ensuring that Hyperlane can support new security models as they are developed.
+Furthermore, it allows applications to select, configure, or invent security models that offer the most appropriate tradeoffs.
 
-[TODO] List specific design decisions and the arguments for or against them.
+There were many ways to build this feature.
+We discuss a few of the design decisions made below.
 
-- Support for off-chain data injection by the relayer.
-- Merkle proof verification in the Inbox as opposed to the `ISM`.
-- A specific `ISM` interface as opposed to per-application relayers a la LayerZero.
+#### Location of merkle proof verification
+
+The ability for relayers to inject arbitrary data into the `ISM` presents a natural opportunity to move the merkle proof out of the `Inbox.process()` interface and into the `ISM`.
+In this model, the `Inbox` would be responsible only for replay protection.
+
+```
+interface IInterchainSecurityModule {
+    function moduleData() external view returns (bytes memory);
+
+    function accept(
+        bytes32 _root,
+        bytes32[32] calldata _proof,
+        bytes calldata _message,
+        bytes calldata _data
+    ) external returns (bool);
+}
+
+interface IInbox {
+    function process(bytes calldata _message) external;
+}
+```
+
+This approach has the advantage of being even more modular than the proposed solution, as the `Inbox` is unopinionated about how messages are sent.
+This allows applications to create `ISMs` that do not incorporate the incremental merkle tree.
+As a simple example, one could build an `ISM` that is a multisig on individual messages, as opposed to a merkle root.
+
+The drawback is that those `ISMs` which wish to incorporate the incremental merkle tree into their security model must do that explicitly.
+We imagine most applications to prefer the censorship resistance and economies of scale that using the incremental merkle tree allows for.
+Thus, we propose leaving proof verification in the `Inbox` so that all `ISM` developers get this "for free".
+
+#### Removal of `_index` from Inbox.process()
+
+In Hyperlane v1, the height of `_root` is passed to `Inbox.process()` as `_index`.
+This is necessary because v1 validators sign the `(_root, _index)` tuple.
+Including `_index` in the validator signature allows Hyperlane to support slashing conditions that it wouldn't otherwise be able to support.
+However, many of the `ISMs` we can envision for v2 would not make use of this, e.g.
+
+- In optimistic models, signature verification is done _before_ calling `ISM.accept()`
+- In zk-based native verification models, the signatures being verified are not specific to Hyperlane
+
+Rather than include a parameter that only some `ISMs` make use of, we propose that, when needed, this parameter be included within `_data`, just as any other piece of `ISM` specific off-chain data would be.
 
 ### **Backwards Compatibility**
 
-For backwards compatibility, each `Inbox` should be configured with a default
-`ISM`. If `recipient.interchainSecurityModule()` reverts, the default `ISM`
-should be used.
+For backwards compatibility, each `Inbox` should be configured with a default `ISM`.
+If `recipient.interchainSecurityModule()` reverts, the default `ISM` should be used.
 
 ### **Security Considerations**
 
-[TODO]
+We believe that modularity is the best security philosophy for interchain messaging, as it has the following properties:
+
+- Fault isolation: The impact of `ISM` failure is limited to those applications using the `ISM`.
+- Forwards compatibility: Sovereign consensus allows for security models to change as new and better solutions emerge (e.g. zkp-based light clients).
+- Customizability: Applications can tailor security models to their needs, rather than relying on a one-size-fits-all solution.
