@@ -26,7 +26,7 @@ Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which
 Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
 
 The `Inbox` contract, when delivering a message via `Inbox.process()`, calls `recipient.interchainSecurityModule().accept()`, which accepts or rejects the message.
-Relayers can inject arbitrary off-chain data (e.g. validator signatures, zero-knowledge proofs, etc.) into `accept()`, allowing for a wide degree of flexibility in `ISM` design.
+Relayers can inject arbitrary off-chain metadata (e.g. validator signatures, zero-knowledge proofs, etc.) into `accept()`, allowing for a wide degree of flexibility in `ISM` design.
 
 Some possible ISMs:
 
@@ -51,18 +51,18 @@ interface IInterchainMessageRecipient {
 }
 
 interface IInterchainSecurityModule {
-    // Used by relayers to determine which off-chain data to inject, and
+    // Used by relayers to determine which off-chain metadata to inject, and
     // how to format it.
     // The first byte must contain the module "type", which informs the relayer
     // how to interpret the remaining bytes.
-    function moduleData() external view returns (bytes memory);
+    function moduleMetadata() external view returns (bytes memory);
 
     // Called by the Inbox to determine whether the provided root
     // is valid to verify proofs against.
     function accept(
         bytes32 _root,
         bytes calldata _message,
-        bytes calldata _data
+        bytes calldata _metadata
     ) external returns (bool);
 }
 
@@ -76,7 +76,7 @@ interface IInbox {
         bytes32 _root,
         bytes32[32] calldata _proof,
         bytes calldata _message,
-        bytes calldata _data
+        bytes calldata _metadata
     ) external;
 }
 ```
@@ -92,18 +92,18 @@ We discuss a few of the design decisions made below.
 
 #### Location of merkle proof verification
 
-The ability for relayers to inject arbitrary data into the `ISM` presents a natural opportunity to move the merkle proof out of the `Inbox.process()` interface and into the `ISM`.
+The ability for relayers to inject arbitrary metadata into the `ISM` presents a natural opportunity to move the merkle proof out of the `Inbox.process()` interface and into the `ISM`.
 In this model, the `Inbox` would be responsible only for replay protection.
 
 ```
 interface IInterchainSecurityModule {
-    function moduleData() external view returns (bytes memory);
+    function moduleMetadata() external view returns (bytes memory);
 
     function accept(
         bytes32 _root,
         bytes32[32] calldata _proof,
         bytes calldata _message,
-        bytes calldata _data
+        bytes calldata _metadata
     ) external returns (bool);
 }
 
@@ -130,7 +130,7 @@ However, many of the `ISMs` we can envision for v2 would not make use of this, e
 - In optimistic models, signature verification is done _before_ calling `ISM.accept()`
 - In zk-based native verification models, the signatures being verified are not specific to Hyperlane
 
-Rather than include a parameter that only some `ISMs` make use of, we propose that, when needed, this parameter be included within `_data`, just as any other piece of `ISM` specific off-chain data would be.
+Rather than include a parameter that only some `ISMs` make use of, we propose that, when needed, this parameter be included within `_metadata`, just as any other piece of `ISM` specific off-chain metadata would be.
 
 ### **Backwards Compatibility**
 
