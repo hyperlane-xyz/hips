@@ -25,12 +25,12 @@ Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which
 
 Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
 
-The `Inbox` contract, when delivering a message via `Inbox.process()`, calls `recipient.interchainSecurityModule().accept()`, which accepts or rejects the message.
-Relayers can inject arbitrary off-chain metadata (e.g. validator signatures, zero-knowledge proofs, etc.) into `accept()`, allowing for a wide degree of flexibility in `ISM` design.
+The `Inbox` contract, when delivering a message via `Inbox.process()`, calls `recipient.interchainSecurityModule().verify()`, which takes in the message and metadata and decides whether or not the message is valid.
+Relayers can inject arbitrary off-chain metadata (e.g. validator signatures, zero-knowledge proofs, etc.) into `verify()`, allowing for a wide degree of flexibility in `ISM` design.
 
 Some possible ISMs:
 
-- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed `_root` in order to accept a message. Note that the set and threshold can vary based on message content.
+- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to accept a message proved against that root. Note that the set and threshold can vary based on message content.
 - Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
 - ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
 - Routing: Routes messages to one or more other `ISMs` according to their content.
@@ -39,7 +39,7 @@ Individual `ISM` specifications should follow in future HIPs.
 
 ```
 interface IInterchainMessageRecipient {
-    // Returns the recipient's ISM, which checks the validity
+    // Optional. Returns the recipient's ISM, which checks the validity
     // of interchain messages.
     function interchainSecurityModule() external view returns (IInterchainSecurityModule);
 
@@ -51,16 +51,8 @@ interface IInterchainMessageRecipient {
 }
 
 interface IInterchainSecurityModule {
-    // Used by relayers to determine which off-chain metadata to inject, and
-    // how to format it.
-    // The first byte must contain the module "type", which informs the relayer
-    // how to interpret the remaining bytes.
-    function moduleMetadata() external view returns (bytes memory);
-
-    // Called by the Inbox to determine whether the provided root
-    // is valid to verify proofs against.
-    function accept(
-        bytes32 _root,
+    // Called by the Inbox to determine whether the provided message is valid.
+    function verify(
         bytes calldata _message,
         bytes calldata _metadata
     ) external returns (bool);
@@ -69,12 +61,9 @@ interface IInterchainSecurityModule {
 interface IInbox {
 
     // Called by relayers to deliver messages to the recipient.
-    // Verifies the merkle proof of `_message` against `_root` and
-    // calls `recipient.interchainSecurityModule().accept()` before
+    // Calls `recipient.interchainSecurityModule().accept()` before
     // calling `recipient.handle()`.
     function process(
-        bytes32 _root,
-        bytes32[32] calldata _proof,
         bytes calldata _message,
         bytes calldata _metadata
     ) external;
@@ -95,42 +84,12 @@ We discuss a few of the design decisions made below.
 The ability for relayers to inject arbitrary metadata into the `ISM` presents a natural opportunity to move the merkle proof out of the `Inbox.process()` interface and into the `ISM`.
 In this model, the `Inbox` would be responsible only for replay protection.
 
-```
-interface IInterchainSecurityModule {
-    function moduleMetadata() external view returns (bytes memory);
-
-    function accept(
-        bytes32 _root,
-        bytes32[32] calldata _proof,
-        bytes calldata _message,
-        bytes calldata _metadata
-    ) external returns (bool);
-}
-
-interface IInbox {
-    function process(bytes calldata _message) external;
-}
-```
-
 This approach has the advantage of being even more modular than the proposed solution, as the `Inbox` is unopinionated about how messages are sent.
 This allows applications to create `ISMs` that do not incorporate the incremental merkle tree.
 As a simple example, one could build an `ISM` that is a multisig on individual messages, as opposed to a merkle root.
 
 The drawback is that those `ISMs` which wish to incorporate the incremental merkle tree into their security model must do that explicitly.
-We imagine most applications to prefer the censorship resistance and economies of scale that using the incremental merkle tree allows for.
-Thus, we propose leaving proof verification in the `Inbox` so that all `ISM` developers get this "for free".
-
-#### Removal of `_index` from Inbox.process()
-
-In Hyperlane v1, the height of `_root` is passed to `Inbox.process()` as `_index`.
-This is necessary because v1 validators sign the `(_root, _index)` tuple.
-Including `_index` in the validator signature allows Hyperlane to support slashing conditions that it wouldn't otherwise be able to support.
-However, many of the `ISMs` we can envision for v2 would not make use of this, e.g.
-
-- In optimistic models, signature verification is done _before_ calling `ISM.accept()`
-- In zk-based native verification models, the signatures being verified are not specific to Hyperlane
-
-Rather than include a parameter that only some `ISMs` make use of, we propose that, when needed, this parameter be included within `_metadata`, just as any other piece of `ISM` specific off-chain metadata would be.
+Furthermore, applications using `ISMs` that do not rely on the merkle tree will still pay the ~15k gas overhead of inserting their messages into the merkle tree on the origin chain.
 
 ### **Backwards Compatibility**
 
