@@ -34,7 +34,7 @@ Below is the proposed interface for an `InterchainGasPaymaster` and descriptions
 
 ```solidity
 interface IInterchainGasPaymaster {
-	enum IsmType {
+    enum IsmType {
         Default,
         NonDefault
     }
@@ -118,8 +118,6 @@ For the non-default ISM case, the relayer will create the process transaction wi
 Note that calldata costs for processing the message are not explicitly calculated by the InterchainGasPaymaster. The maximum Hyperlane message size is 2 KiB, or 2048 bytes. Currently, the Ethereum calldata gas cost is 16 gas per non-zero byte, which comes out to a maximum of `32,768` gas. To avoid an additional required mapping in the InterchainGasCalculator of remote domain to the cost per byte of calldata, a flat cost of 32,000 gas to cover potential calldata costs is charged.
 
 ### **Rationale**
-
-< Dig into the design decisions that were made, and what motivations are at play. If applicable, list alternate designs that were given serious consideration. A complete rationale should raise important objections or concerns surfaced during HIP discussion. >
 
 #### Default vs non-default ISM distinction
 
