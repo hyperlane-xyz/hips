@@ -30,62 +30,49 @@ Paying for fees can be done by paying an `InterchainGasPaymaster` contract relat
 
 At a high level, the `InterchainGasPaymaster` contract should accept the message ID of a Hyperlane message that has been dispatched, information about how much gas the relayer should use when processing the message, and payment in the form of native tokens.
 
-Below is the proposed interface for an `InterchainGasPaymaster` and descriptions of what the functions would do for a paymaster that quotes payments on chain. Note that an `InterchainGasPaymaster` with the same function interface could be implemented that doesn’t involve any on-chain fee quoting and still requires off-chain fee calculation.
+Below is the proposed generic interface for an `InterchainGasPaymaster`. Note that implementations of an IGP may place differring semantic meaning to each of the parameters.
 
 ```solidity
 interface IInterchainGasPaymaster {
-    enum IsmType {
-        Default,
-        NonDefault
-    }
-		
-	/**
+    /**
+     * @notice Accepts native tokens to pay for the destination gas cost of a
+     *   message. Implementations may or may not require specific payment amounts.
+     * @param _messageId The message ID.
+     * @param _destinationDomain The destination domain of the message.
+     * @param _gas An amount of gas.
+     * @param _refundAddress The address to refund any overpayment to.
+     */
+    function payGas(
+        bytes32 _messageId,
+        uint32 _destinationDomain,
+        uint256 _gas,
+        address _refundAddress
+    ) external payable;
+}
+```
+
+An IGP that quotes and requires on-chain payment for a total amount of gas that is to be used by the ISM and recipient `handle` would look like:
+
+```
+contract FeeQuotingIgp {
+    /**
      * @notice Emitted when a gas payment is made.
-     * @param messageId The ID of the message the payment is for.
+     * @param messageId The message ID.
      * @param amount The amount of native tokens paid.
      * @param gas The amount of destination gas paid for.
-     * @param ismType What type of ISM the message expects to be used.
      */
     event GasPayment(
         bytes32 indexed messageId,
         uint256 amount,
-        uint256 gas,
-        IsmType ismType
+        uint256 gas
     );
 
     /**
-     * @notice Accepts payment for a message that uses the default ISM on the
-     *   destination and uses `_handleGas` gas in the recipient's `handle` function.
-     *   The amount of all non-handler gas used by message processing is read
-     *   from storage and is added to `_handleGas` to calculate the total
-     *   estimated amount of destination gas that's required. The stored value
-     *   includes the intrinsic gas, ISM metadata calldata gas, approximated
-     *   message calldata gas, ISM.verify gas, and any overhead gas incurred
-     *   by the Mailbox contract.
-     *   Using the total expected destination gas usage, the destination gas price
-     *   (from an oracle), and the destination chain native token quoted in the origin
-     *   chain native token (from an oracle), the required fee payment is calculated
-     *   and required to be at least the msg.value. Any overpayment is sent back
-     *   to the `_refundAddress`.
-     *   Emits the `GasPayment` event with _handleGas gas and IsmType.Default.
-     * @param _messageId The message ID.
-     * @param _destinationDomain The destination domain of the message.
-     * @param _handleGas The amount of gas required by the recipient's `handle` function.
-     * @param _refundAddress The address to refund any msg.value overpayment to.
-     */
-    function payGasForDefaultIsm(
-        bytes32 _messageId,
-        uint32 _destinationDomain,
-        uint256 _handleGas,
-        address _refundAddress
-    ) external payable;
-
-    /**
-     * @notice Accepts payment for a message that uses a non-default ISM on the
-     *   destination. The `_ismAndHandleGas` should cover ISM metadata calldata gas,
-     *   ISM.verify gas, and gas required by the recipient's `handle` function.
+     * @notice Accepts payment for a message, reverting if not enough payment was provided.
+     *   The `_ismAndHandleGas` should cover ISM metadata calldata gas, ISM.verify gas,
+     *   and gas required by the recipient's `handle` function.
      *   The gas required for other operations involving the processing of the
-     *   message is read from storage and is added to `_handleGas` to calculate
+     *   message is read from storage and is added to `_ismAndHandleGas` to calculate
      *   the total estimated amount of destination gas that's required.
      *   The stored value includes intrinsic gas, approximated message calldata
      *   gas, and any overhead gas incurred by the Mailbox contract.
@@ -94,38 +81,86 @@ interface IInterchainGasPaymaster {
      *   chain native token (from an oracle), the required fee payment is calculated
      *   and required to be at least the msg.value. Any overpayment is sent back
      *   to the `_refundAddress`.
-     *   Emits the `GasPayment` event with _ismAndHandleGas gas and IsmType.NonDefault.
+     *   Emits the `GasPayment` event with the total amount of gas paid for.
      * @param _messageId The message ID.
      * @param _destinationDomain The destination domain of the message.
      * @param _ismAndHandleGas The amount of gas to cover ISM metadata calldata,
      *   ISM.verify gas, and gas required by the recipient's `handle` function.
      * @param _refundAddress The address to refund any msg.value overpayment to.
      */
-    function payGasForNonDefaultIsm(
+    function payGas(
         bytes32 _messageId,
         uint32 _destinationDomain,
         uint256 _ismAndHandleGas,
         address _refundAddress
     ) external payable;
+}
 ```
 
-The off-chain relayer will index `GasPayment` events and relate them to dispatched messages based off their message ID.
+Hyperlane users are likely to be confident in the amount of gas that their recipient's `handle` function will use on the destination, but they likely don't have the same confidence in the amount of gas they need for their ISM. Users may be using the default ISM which could change entirely, or their ISM may undergo parameter changes that could change the amount of gas required. To provide a better experience, ISM-specific IGPs can be provided that allow users to supply the amount of gas their recipient's `handle` function consumes, and the ISM-specific costs are read from storage and accurately updated by the IGP owner.
 
-For the default ISM case, the relayer will create the process transaction with a gas limit that results in at least `_handleGas` gas able to be used by the recipient’s `handle` function. The total gas limit of the transaction can be found by the relayer estimating all other gas costs (i.e. intrinsic gas, calldata gas including the ISM metadata and message body, ISM.verify gas, and Mailbox overhead gas) and adding this to the `_handleGas`.
+```
+contract IsmFeeQuotingIgp {
+    // An implementation of the `FeeQuotingIgp` provided above.
+    IInterchainGasPaymaster feeQuotingIgp;
 
-For the non-default ISM case, the relayer will create the process transaction with a gas limit that results in at least `_ismAndHandleGas` able to be used by ISM and message recipient-related gas costs (i.e. ISM metadata calldata gas, ISM.verify gas, and the recipient’s `handle` function gas). The total gas limit of the transaction can be found by the relayer estimating all other gas costs (i.e. intrinsic gas, calldata gas for the message body, and Mailbox overhead gas) and adding this to `_ismAndHandleGas`.
+    // Destination domain => gas usage of the ISM.
+    mapping(uint32 => uint256) ismDestinationGas;
 
-Note that calldata costs for processing the message are not explicitly calculated by the InterchainGasPaymaster. The maximum Hyperlane message size is 2 KiB, or 2048 bytes. Currently, the Ethereum calldata gas cost is 16 gas per non-zero byte, which comes out to a maximum of `32,768` gas. To avoid an additional required mapping in the InterchainGasCalculator of remote domain to the cost per byte of calldata, a flat cost of 32,000 gas to cover potential calldata costs is charged.
+    /**
+     * @notice Accepts payment for a message, reverting if not enough payment was provided.
+     *   The `_handleGas` should cover the gas required by the recipient's `handle` function.
+     *   The gas required for ISM costs, including ISM metadata calldata and ISM.verify gas,
+     *   is read from storage and is added to `_handleGas` before being passed to the feeQuotingIgp.
+     * @param _messageId The message ID.
+     * @param _destinationDomain The destination domain of the message.
+     * @param _ismAndHandleGas The amount of gas to cover ISM metadata calldata,
+     *   ISM.verify gas, and gas required by the recipient's `handle` function.
+     * @param _refundAddress The address to refund any msg.value overpayment to.
+     */
+    function payGas(
+        bytes32 _messageId,
+        uint32 _destinationDomain,
+        uint256 _handleGas,
+        address _refundAddress
+    ) external payable {
+        uint256 _ismAndHandleGas = ismDestinationGas[_destinationGas] + _handleGas;
+
+        feeQuotingIgp.payGasFor(
+            _messageId,
+            _destinationDomain,
+            _ismAndHandleGas,
+            _refundAddress
+        );
+    }
+
+    function setIsmDestinationGas(uint32 _destinationDomain, uint256 _ismGas) external onlyOwner;
+}
+```
+
+The off-chain relayer relating to a `FeeQuotingIgp` will index `GasPayment` events and relate them to dispatched messages based off their message ID. Because the `FeeQuotingIgp` will revert if there was insufficient payment, all `GasPayment` events relate to messages that have fully paid for an amount of gas, and the relayer will honor these payments.
+
+Note that calldata costs for processing the message are not explicitly calculated by the fee quoting IGP. The maximum Hyperlane message size is 2 KiB, or 2048 bytes. Currently, the Ethereum calldata gas cost is 16 gas per non-zero byte, which comes out to a maximum of `32,768` gas. To avoid an additional required mapping in the InterchainGasCalculator of remote domain to the cost per byte of calldata, a flat cost of 32,000 gas to cover potential calldata costs is charged.
 
 ### **Rationale**
 
 #### Default vs non-default ISM distinction
 
-Hyperlane users sending messages that use the default ISM should not need to worry about the destination gas costs incurred by the default ISM. This includes the metadata calldata and the `verify` function. Because the default ISM is out of user control and the parameters of the default ISM may change, a straightforward “happy path” for default ISM users is provided.
+#### ISM-specific fee quoting IGPs
 
-For Hyperlane users that use a non-default ISM, a slightly more complicated path is required. On the origin chain, the the paymaster cannot know what the length of an arbitrary ISM’s metadata calldata is, nor can it know the expected gas used by an arbitrary ISM’s `verify` function. Hyperlane users making use of the non-default ISM are expected to be aware of these costs themselves, or to fetch these from an on-chain source of truth and pass it into the InterchainGasPaymaster.
+On the origin chain, an IGP cannot know what the length of an arbitrary ISM’s metadata calldata is, nor can it know the expected gas used by an arbitrary ISM’s `verify` function. Therefore, the IGP must get this information from some source.
 
-A Hyperlane user can always use `payGasForNonDefaultIsm` even if their message uses the default ISM. They would be required to ensure the gas values passed in for ISM related costs are accurate.
+Hyperlane users sending messages that use the default ISM should not need to worry about the destination gas costs incurred by the default ISM. This includes the metadata calldata and the `verify` function. Because the default ISM is out of user control and the parameters of the default ISM may change, a straightforward “happy path” for default ISM users is provided via the default ISM's IGP.
+
+Any non-default ISMs may also have their own ISM-specific IGPs created. Alternatively, users can always call the fee quoting IGP directly with their own `_ismAndHandleGas` amount.
+
+One initial idea was to provide the ISM-specific destination gas costs on the origin chain by having a view function on the local ISM:
+
+```
+function destinationGas(uint32 _destinationGas) external returns (uint256);
+```
+
+However, this conflicts with permissionless deployment of Hyperlane onto long-tail chains. A relayer can decide to offer its relaying services to process messages to long tail chains if they so choose, and it's more natural to put the onus on the relayer to specify what those costs are. 
 
 #### Calldata gas
 
