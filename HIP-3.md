@@ -127,7 +127,7 @@ contract IsmFeeQuotingIgp {
     ) external payable {
         uint256 _ismAndHandleGas = ismDestinationGas[_destinationDomain] + _handleGas;
 
-        feeQuotingIgp.payGasFor(
+        feeQuotingIgp.payGas(
             _messageId,
             _destinationDomain,
             _ismAndHandleGas,
