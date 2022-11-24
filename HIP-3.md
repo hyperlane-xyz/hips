@@ -43,7 +43,7 @@ interface IInterchainGasPaymaster {
      * @param _gas An amount of gas.
      * @param _refundAddress The address to refund any overpayment to.
      */
-    function payGas(
+    function payForGas(
         bytes32 _messageId,
         uint32 _destinationDomain,
         uint256 _gas,
@@ -89,7 +89,7 @@ interface FeeQuotingIgp {
      *   ISM.verify gas, and gas required by the recipient's `handle` function.
      * @param _refundAddress The address to refund any msg.value overpayment to.
      */
-    function payGas(
+    function payForGas(
         bytes32 _messageId,
         uint32 _destinationDomain,
         uint256 _ismAndHandleGas,
@@ -119,7 +119,7 @@ contract IsmFeeQuotingIgp {
      *   ISM.verify gas, and gas required by the recipient's `handle` function.
      * @param _refundAddress The address to refund any msg.value overpayment to.
      */
-    function payGas(
+    function payForGas(
         bytes32 _messageId,
         uint32 _destinationDomain,
         uint256 _handleGas,
@@ -127,7 +127,7 @@ contract IsmFeeQuotingIgp {
     ) external payable {
         uint256 _ismAndHandleGas = ismDestinationGas[_destinationDomain] + _handleGas;
 
-        feeQuotingIgp.payGas(
+        feeQuotingIgp.payForGas(
             _messageId,
             _destinationDomain,
             _ismAndHandleGas,
