@@ -4,7 +4,7 @@
 
 ### **Brief Summary / Abstract**
 
-Defines the specification for sovereign consensus, which puts control of the interchain security model in the hands of message recipients.
+Defines the specification for sovereign consensus and interchain security modules, which allows message recipients to configure their own security models.
 
 ### **Motivation**
 
@@ -23,52 +23,45 @@ Furthermore, the modularity of sovereign consensus allows Hyperlane to be forwar
 
 Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which specify the rules by which a `recipient` will accept an interchain message.
 
-Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
-
-The `Inbox` contract, when delivering a message via `Inbox.process()`, calls `recipient.interchainSecurityModule().verify()`, which takes in the message and metadata and decides whether or not the message is valid.
-Relayers can inject arbitrary off-chain metadata (e.g. validator signatures, zero-knowledge proofs, etc.) into `verify()`, allowing for a wide degree of flexibility in `ISM` design.
-
-Some possible ISMs:
-
-- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to accept a message proved against that root. Note that the set and threshold can vary based on message content.
-- Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
-- ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
-- Routing: Routes messages to one or more other `ISMs` according to their content.
-
-Individual `ISM` specifications should follow in future HIPs.
+`ISMs` must implement the folling interface:
 
 ```
-interface IInterchainMessageRecipient {
-    // Optional. Returns the recipient's ISM, which checks the validity
-    // of interchain messages.
-    function interchainSecurityModule() external view returns (IInterchainSecurityModule);
-
-    function handle(
-        uint32 _origin,
-        bytes32 _sender,
-        bytes calldata _payload
-    ) external;
-}
-
 interface IInterchainSecurityModule {
-    // Called by the Inbox to determine whether the provided message is valid.
-    function verify(
-        bytes calldata _message,
-        bytes calldata _metadata
+    /**
+     * @notice Returns an enum that represents the type of security model
+     * encoded by this ISM.
+     * @dev Relayers infer how to fetch and format metadata.
+     */
+    function type() external view returns (uint8);
+
+    /**
+     * @notice Defines a security model that decides whether or not to accept
+     * an interchain message based on the provided metadata.
+     * @param _metadata Off-chain metadata provided by a relayer, specific to
+     * the security model encoded by the module (e.g. validator signatures)
+     * @param _message Hyperlane encoded interchain message
+     * @return True if the message should be accepted
+     */
+    function accept(
+        bytes calldata _metadata,
+        bytes calldata _message
     ) external returns (bool);
 }
+```
 
-interface IInbox {
+Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
 
-    // Called by relayers to deliver messages to the recipient.
-    // Calls `recipient.interchainSecurityModule().accept()` before
-    // calling `recipient.handle()`.
-    function process(
-        bytes calldata _message,
-        bytes calldata _metadata
-    ) external;
+```
+interface ISpecifiesInterchainSecurityModule {
+    /**
+     * @notice Returns the ISM to use for this recipient of interchain messages.
+     * @dev Optional, if not implemented the Mailbox's default ISM will be used.
+     */
+    function interchainSecurityModule() external view returns (IInterchainSecurityModule);
 }
 ```
+
+The `Mailbox` contract, when delivering a message via `Mailbox.process()`, must check to see if the message recipient implements the `interchainSecurityModule()` view function. If it does, and returns a non-zero address, the `Mailbox` must call `accept()` on that address. Otherwise, it must call `accept()` on the `Mailbox's` default `ISM`.
 
 ### **Rationale**
 
@@ -76,25 +69,20 @@ Sovereign consensus allows for a modular approach to interchain security.
 This allows the core protocol to be forward compatible, ensuring that Hyperlane can support new security models as they are developed.
 Furthermore, it allows applications to select, configure, or invent security models that offer the most appropriate tradeoffs.
 
-There were many ways to build this feature.
 We discuss a few of the design decisions made below.
 
-#### Location of merkle proof verification
+#### Finite ISM types
 
-The ability for relayers to inject arbitrary metadata into the `ISM` presents a natural opportunity to move the merkle proof out of the `Inbox.process()` interface and into the `ISM`.
-In this model, the `Inbox` would be responsible only for replay protection.
+This proposal relys on their being a finite set of ISM types that the relayer knows how to fetch and format metadata for.
 
-This approach has the advantage of being even more modular than the proposed solution, as the `Inbox` is unopinionated about how messages are sent.
-This allows applications to create `ISMs` that do not incorporate the incremental merkle tree.
-As a simple example, one could build an `ISM` that is a multisig on individual messages, as opposed to a merkle root.
+Alternatively, one could imagine a CCIP-read (or similar) based protocol for expressing arbitrary metadata, allowing for the definition of arbitrary ISMs.
 
-The drawback is that those `ISMs` which wish to incorporate the incremental merkle tree into their security model must do that explicitly.
-Furthermore, applications using `ISMs` that do not rely on the merkle tree will still pay the ~15k gas overhead of inserting their messages into the merkle tree on the origin chain.
+We chose this approach because we imagine a small number of ISM types being sufficiently expressive to encode most (if not all) security models.
 
 ### **Backwards Compatibility**
 
-For backwards compatibility, each `Inbox` should be configured with a default `ISM`.
-If `recipient.interchainSecurityModule()` reverts, the default `ISM` should be used.
+For backwards compatibility with V1, each `Mailbox` should be configured with a default `ISM`.
+If `recipient.interchainSecurityModule()` reverts or returns the zero address, the default `ISM` should be used.
 
 ### **Security Considerations**
 
@@ -103,3 +91,15 @@ We believe that modularity is the best security philosophy for interchain messag
 - Fault isolation: The impact of `ISM` failure is limited to those applications using the `ISM`.
 - Forwards compatibility: Sovereign consensus allows for security models to change as new and better solutions emerge (e.g. zkp-based light clients).
 - Customizability: Applications can tailor security models to their needs, rather than relying on a one-size-fits-all solution.
+
+### **Future work**
+
+Individual `ISM` specifications should follow in future HIPs.
+
+Some possible ISMs to define:
+
+- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to accept a message proved against that root. Note that the set and threshold can vary based on message content.
+- Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
+- ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
+- Routing: Routes messages to one or more other `ISMs` according to their content.
+- Combo: Requires acceptance from multiple `ISMs`
