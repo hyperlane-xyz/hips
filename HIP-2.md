@@ -90,6 +90,10 @@ interface IValidatorSignatureVerifier {
 
 ### **Rationale**
 
+#### Inclusion of origin mailbox address
+
+Requires ISMs to verify this! Kind of a pain!
+
 #### Encouraging verification through ValidatorSignatureVerifier
 
 While less gas efficient, this ensures that there is a single contract that watchers can monitor for fraudulent validator signatures.
