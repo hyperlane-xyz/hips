@@ -6,104 +6,104 @@
 
 Defines the specification for Hyperlane validator signatures.
 
+Hyperlane validators sign messages that act as attestations of the form:
+
+> "On chain _d_, the mailbox contract at address _m_ had a messages tree with merkle root _r_ and message count _i_"
+
 ### **Motivation**
 
-Multisigs are the simplest form of security model, one that is already supported by Hyperlane. The goal of this HIP is to standardize the `MultisigIsm` interface so that more variants may be implemented.
+Hyperlane validators provide the foundation for two core interchain security modules types: Multisig, and Optimistic.
+
+This HIP defines a standard for validator signatures so that they can be shared across different security module instances.
 
 ### **Tech Spec**
 
-A `MultisigIsm` must expect the metadata passed to `accept()` to be formatted in the following way:
+A Hyperlane validator should sign the following, in compliance with [EIP-191](https://eips.ethereum.org/EIPS/eip-191).
 
 ```
 /**
- * [   0:  32] Merkle root
- * [  32:  36] Root index
- * [  36:  68] Origin mailbox address
- * [  68:1092] Merkle proof
- * [1092:1093] Threshold
- * [1093:????] Validator signatures, 65 bytes each, with length == Threshold
- * [????:????] Addresses of the entire validator set, left padded to bytes32
+ * @notice Returns the digest that Hyperlane validators should sign
+ * @param _domain The origin domain of the Mailbox being validated
+ * @param _mailbox The address of the Mailbox being validated, as bytes32
+ * @param _root The merkle root that the validator is attesting to
+ * @param _index The message count that the validator is attesting to
+ * @return The digest to EIP-191 sign
  */
-```
+function getDigestToSign(
+    uint32 _domain,
+    bytes32 _mailbox,
+    bytes32 _root,
+    uint32 _index
+)
+    external
+    pure
+    returns (bytes32)
+{
 
-A `MultisigIsm` should verify the the merkle proof against `root`,
-
-A `MultisigIsm` must implement the following interface:
-
-```
-interface IMultisigIsm is IInterchainSecurityModule {
-    /**
-     * @notice Returns the set of validators responsible for securing _message
-     * @dev Can change based on the content of _message
-     * @param _message Hyperlane formatted interchain message
-     * @return The set of validators responsible for securing _message
-     */
-    function validators(bytes calldata _message) external view returns (address[] memory);
-
-    /**
-     * @notice Returns the number of validator signatures needed to accept
-     * _message
-     * @dev Can change based on the content of _message
-     * @param _message Hyperlane formatted interchain message
-     * @return The number of signatures needed to accept _message
-     */
-    function threshold(bytes calldata _message) external view returns (uint8);
+    bytes32 _domainHash = keccak256(
+        abi.encodePacked(_domain, _mailbox, "HYPERLANE")
+    );
+    return keccak256(abi.encodePacked(_domainHash, _root, _index));
 }
 ```
 
-When attempting to deliver a message to a recipient that uses a `MultisigIsm`, relayers should query the `validators()` and `threshold()` view functions to
+A `ValidatorSignatureVerifier` contract implementing the following interface should be deployed to each chain supporting Hyperlane. This contract must implement the following interface and emit the `ValidatorSignature` event when verifying a signature.
 
-Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
+Verifying signatures via `ValidatorSignatureVerifier` allows watchers to more easily monitor for fraudulent validator signatures.
 
 ```
-interface ISpecifiesInterchainSecurityModule {
+interface IValidatorSignatureVerifier {
     /**
-     * @notice Returns the ISM to use for this recipient of interchain messages.
-     * @dev Optional, if not implemented the Mailbox's default ISM will be used.
+     * @notice Emitted when a validator signature is verified
+     * @dev Used by watchtowers to detect fraudulent validators
+     * @param domain The origin domain of the Mailbox being validated
+     * @param mailbox The address of the Mailbox being validated, as bytes32
+     * @param root The merkle root that the validator is attesting to
+     * @param index The message count that the validator is attesting to
+     * @param signature The 65-byte ECDSA validator signature
      */
-    function interchainSecurityModule() external view returns (IInterchainSecurityModule);
+    event ValidatorSignature(
+        uint32 domain,
+        bytes32 mailbox,
+        bytes32 root,
+        uint32 index
+        bytes signature
+    );
+
+    /**
+     * @param _domain The origin domain of the Mailbox being validated
+     * @param _mailbox The address of the Mailbox being validated, as bytes32
+     * @param _root The merkle root that the validator is attesting to
+     * @param _index The message count that the validator is attesting to
+     * @param _signature The 65-byte ECDSA validator signature
+     * @return The address of the validator that signed
+     */
+    function recoverValidatorFromSignature(
+        uint32 _domain,
+        bytes32 _mailbox,
+        bytes32 _root,
+        uint32 _index,
+        bytes calldata _signature
+    ) external returns (address);
 }
 ```
-
-The `Mailbox` contract, when delivering a message via `Mailbox.process()`, must check to see if the message recipient implements the `interchainSecurityModule()` view function. If it does, and returns a non-zero address, the `Mailbox` must call `accept()` on that address. Otherwise, it must call `accept()` on the `Mailbox's` default `ISM`.
 
 ### **Rationale**
 
-Sovereign consensus allows for a modular approach to interchain security.
-This allows the core protocol to be forward compatible, ensuring that Hyperlane can support new security models as they are developed.
-Furthermore, it allows applications to select, configure, or invent security models that offer the most appropriate tradeoffs.
+#### Encouraging verification through ValidatorSignatureVerifier
 
-We discuss a few of the design decisions made below.
+While less gas efficient, this ensures that there is a single contract that watchers can monitor for fraudulent validator signatures.
 
-#### Finite ISM types
+Fraudulent validator signatures may be used to slash the fraudulent validator, or as a trigger to disconnect an optimistic ISM.
 
-This proposal relys on their being a finite set of ISM types that the relayer knows how to fetch and format metadata for.
-
-Alternatively, one could imagine a CCIP-read (or similar) based protocol for expressing arbitrary metadata, allowing for the definition of arbitrary ISMs.
-
-We chose this approach because we imagine a small number of ISM types being sufficiently expressive to encode most (if not all) security models.
+Encouraging a single implementation also reduces the risk that validator-signature-based ISM implementers introduce bugs in signature verification.
 
 ### **Backwards Compatibility**
 
-For backwards compatibility with V1, each `Mailbox` should be configured with a default `ISM`.
-If `recipient.interchainSecurityModule()` reverts or returns the zero address, the default `ISM` should be used.
+This format is not backwards compatible with V1, which is actually a good thing as it means validator signatures cannot be re-used.
+
+The default MultisigIsm in the V2 pre-release does not use a `ValidatorSignatureVerifier`. This can be corrected in future ISM deployements.
 
 ### **Security Considerations**
 
-We believe that modularity is the best security philosophy for interchain messaging, as it has the following properties:
-
-- Fault isolation: The impact of `ISM` failure is limited to those applications using the `ISM`.
-- Forwards compatibility: Sovereign consensus allows for security models to change as new and better solutions emerge (e.g. zkp-based light clients).
-- Customizability: Applications can tailor security models to their needs, rather than relying on a one-size-fits-all solution.
-
-### **Future work**
-
-Individual `ISM` specifications should follow in future HIPs.
-
-Some possible ISMs to define:
-
-- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to accept a message proved against that root. Note that the set and threshold can vary based on message content.
-- Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
-- ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
-- Routing: Routes messages to one or more other `ISMs` according to their content.
-- Combo: Requires acceptance from multiple `ISMs`
+A bug in `ValidatorSignatureVerifier` would risk compromising all validator-signature-based ISMs.

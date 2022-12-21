@@ -12,7 +12,9 @@ Multisigs are the simplest form of security model, one that is already supported
 
 ### **Tech Spec**
 
-A `MultisigIsm` must implement the following interface. Relayers should use these view functions to understand what metadata the `ISM` needs in order to accept a message.
+A `MultisigIsm` must return `3` in `type()`.
+
+A `MultisigIsm` must implement the following interface. Relayers should use these view functions to understand what metadata the `ISM` needs in order to verify a message.
 
 ```
 interface IMultisigIsm is IInterchainSecurityModule {
@@ -29,7 +31,7 @@ interface IMultisigIsm is IInterchainSecurityModule {
 }
 ```
 
-A `MultisigIsm` must expect the metadata passed to `accept()` to be formatted in the following way:
+A `MultisigIsm` must expect the metadata passed to `verify()` to be formatted in the following way:
 
 ```
 /**
