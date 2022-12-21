@@ -21,7 +21,7 @@ Furthermore, the modularity of sovereign consensus allows Hyperlane to be forwar
 
 ### **Tech Spec**
 
-Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which specify the rules by which a `recipient` will accept an interchain message.
+Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which specify the rules that should be used when verifying an interchain message.
 
 `ISMs` must implement the folling interface:
 
@@ -35,14 +35,14 @@ interface IInterchainSecurityModule {
     function type() external view returns (uint8);
 
     /**
-     * @notice Defines a security model that decides whether or not to accept
-     * an interchain message based on the provided metadata.
+     * @notice Defines a security model responsible for verifying interchain
+     * messages based on the provided metadata.
      * @param _metadata Off-chain metadata provided by a relayer, specific to
      * the security model encoded by the module (e.g. validator signatures)
      * @param _message Hyperlane encoded interchain message
-     * @return True if the message should be accepted
+     * @return True if the message was verified
      */
-    function accept(
+    function verify(
         bytes calldata _metadata,
         bytes calldata _message
     ) external returns (bool);
@@ -61,7 +61,7 @@ interface ISpecifiesInterchainSecurityModule {
 }
 ```
 
-The `Mailbox` contract, when delivering a message via `Mailbox.process()`, must check to see if the message recipient implements the `interchainSecurityModule()` view function. If it does, and returns a non-zero address, the `Mailbox` must call `accept()` on that address. Otherwise, it must call `accept()` on the `Mailbox's` default `ISM`.
+The `Mailbox` contract, when delivering a message via `Mailbox.process()`, must check to see if the message recipient implements the `interchainSecurityModule()` view function. If it does, and returns a non-zero address, the `Mailbox` must call `verify()` on that address. Otherwise, it must call `verify()` on the `Mailbox's` default `ISM`.
 
 ### **Rationale**
 
@@ -98,8 +98,8 @@ Individual `ISM` specifications should follow in future HIPs.
 
 Some possible ISMs to define:
 
-- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to accept a message proved against that root. Note that the set and threshold can vary based on message content.
-- Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are accepted, and after a fraud window has expired messages can be proved against these roots.
+- Multisig: Given a message, specifies a set of signers and a threshold that need to have signed a merkle root, in order to verify a message proved against that root. Note that the set and threshold can vary based on message content.
+- Optimistic: Given a message, specifies a set of watchers that can pause the `ISM`. Otherwise, merkle roots are verified, and after a fraud window has expired messages can be proved against these roots.
 - ZKP: Verifies a zero-knowledge-proof of the origin chain's light client protocol, with a merkle proof of the corresponding Hyperlane Outbox's merkle root.
 - Routing: Routes messages to one or more other `ISMs` according to their content.
-- Combo: Requires acceptance from multiple `ISMs`
+- Combo: Requires verification by multiple `ISMs`
