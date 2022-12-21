@@ -92,7 +92,43 @@ interface IValidatorSignatureVerifier {
 
 #### Inclusion of origin mailbox address
 
-Requires ISMs to verify this! Kind of a pain!
+Including the origin mailbox address in the validator signature gives it clearer semantic meaning that can be verified:
+
+> > "On chain _d_, the mailbox contract at address _m_ had a messages tree with merkle root _r_ and message count _i_"
+
+The downside is that care will need to be taken in order to ensure that malicious validators cannot manipulate the mailbox address in their signature in order to avoid the consequences of fraud.
+
+Take the following psuedo-code for a slashing contract:
+
+```
+function slash(
+    uint32 _domain,
+    bytes32 _mailbox,
+    bytes32 _root,
+    uint32 _index,
+    bytes calldata _signature
+) external returns (address) {
+    address _validator = signatureVerifier.recoverValidatorFromSignature(
+        _domain,
+        _mailbox,
+        _root,
+        _index,
+        _signature
+    );
+    require(IMailbox(_mailbox).rootAt(_index) != _root);
+    _slash(_validator);
+}
+```
+
+Validators could avoid the consequences of signing a fraudulent checkpoint by deploying a contract that implements the `IMailbox` interface but allows them to push arbitrary messages to it. They could then sign a checkpoint for this contract and attempt to use that to deliver fraudulent messages on some destination chain.
+
+There are two potential mitigations:
+
+1. Encode remote mailbox addresses in ISMs
+   This would ensure that ISMs only accept messages from mailboxes that the ISM deployer knows to be a correct implementation of `Mailbox`. This ensures that `slash()` will always succeed if the validator attempts to attest to a root containing fraudulent messages.
+
+2. Encode supported mailboxes in the slashing contract
+   This would mean that signing a checkpoint for an unsupported mailbox would be considered a slashable offense. This could be done either by hardcoding addresses in storage, or hardcoding supported mailbox implementation bytecode, presuming the contents of mailbox storage do not affect the trust assumptions of outbound messages (they do not as of 2022-12-21).
 
 #### Encouraging verification through ValidatorSignatureVerifier
 
