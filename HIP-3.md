@@ -12,22 +12,24 @@ Multisigs are the simplest form of security model, one that is already supported
 
 ### **Tech Spec**
 
-A `MultisigIsm` must return `3` in `type()`.
+A `MultisigIsm` must return `3` in `moduleType()`.
 
-A `MultisigIsm` must implement the following interface. Relayers should use these view functions to understand what metadata the `ISM` needs in order to verify a message.
+A `MultisigIsm` must implement the following interface. Relayers should use the `validatorsAndThreshold()` view function to understand what metadata the `ISM` needs in order to verify a message.
 
 ```
 interface IMultisigIsm is IInterchainSecurityModule {
     /**
      * @notice Returns the set of validators responsible for verifying _message
+     * and the number of signatures required
      * @dev Can change based on the content of _message
      * @param _message Hyperlane formatted interchain message
-     * @return The number of signatures needed, and the array of validator
-     * addresses.
+     * @return validators The array of validator addresses
+     * @return threshold The number of validator signatures needed
      */
-    function validatorSet(
-        bytes calldata _message
-    ) external view returns (uint8 threshold, address[] memory validators);
+    function validatorsAndThreshold(bytes calldata _message)
+        external
+        view
+        returns (address[] memory validators, uint8 threshold);
 }
 ```
 
@@ -94,9 +96,9 @@ Finally, a `MultisigIsm` should verify that at least `metadata.threshold()` sign
 
 ### **Rationale**
 
-#### \_message as an argument to validatorSet()
+#### \_message as an argument to validatorsAndThreshold()
 
-Passing `_message` as argument to `validatorSet()` allows for a broad array of customizability.
+Passing `_message` as argument to `validatorsAndThreshold()` allows for a broad array of customizability.
 
 This allows users to create `MultisigIsms` that are capable of verifying messages from many remote domains (by switching on `message.origin()`).
 
