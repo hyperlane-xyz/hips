@@ -32,7 +32,7 @@ interface IInterchainSecurityModule {
      * encoded by this ISM.
      * @dev Relayers infer how to fetch and format metadata.
      */
-    function type() external view returns (uint8);
+    function moduleType() external view returns (uint8);
 
     /**
      * @notice Defines a security model responsible for verifying interchain
