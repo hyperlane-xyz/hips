@@ -20,7 +20,7 @@ This HIP defines a standard for validator signatures so that they can be shared 
 
 A Hyperlane validator should sign the following, in compliance with [EIP-191](https://eips.ethereum.org/EIPS/eip-191).
 
-```
+```solidity
 /**
  * @notice Returns the digest that Hyperlane validators should sign
  * @param _domain The origin domain of the Mailbox being validated
@@ -51,7 +51,7 @@ A `ValidatorSignatureVerifier` contract implementing the following interface sho
 
 Verifying signatures via `ValidatorSignatureVerifier` allows watchers to more easily monitor for fraudulent validator signatures.
 
-```
+```solidity
 interface IValidatorSignatureVerifier {
     /**
      * @notice Emitted when a validator signature is verified
@@ -134,7 +134,7 @@ The downside is that care will need to be taken in order to ensure that maliciou
 
 Take the following psuedo-code for a slashing contract:
 
-```
+```solidity
 function slash(
     uint32 _domain,
     bytes32 _mailbox,
