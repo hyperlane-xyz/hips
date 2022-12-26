@@ -71,6 +71,23 @@ interface IValidatorSignatureVerifier {
     );
 
     /**
+     * @notice Emitted when one or more validator signatures are verified
+     * @dev Used by watchtowers to detect fraudulent validators
+     * @param domain The origin domain of the Mailbox being validated
+     * @param mailbox The address of the Mailbox being validated, as bytes32
+     * @param root The merkle root that the validator is attesting to
+     * @param index The message count that the validator is attesting to
+     * @param signature 65-byte ECDSA validator signatures
+     */
+    event ValidatorSignatures(
+        uint32 domain,
+        bytes32 mailbox,
+        bytes32 root,
+        uint32 index
+        bytes[] signatures
+    );
+
+    /**
      * @param _domain The origin domain of the Mailbox being validated
      * @param _mailbox The address of the Mailbox being validated, as bytes32
      * @param _root The merkle root that the validator is attesting to
@@ -85,6 +102,23 @@ interface IValidatorSignatureVerifier {
         uint32 _index,
         bytes calldata _signature
     ) external returns (address);
+
+    /**
+     * @param _domain The origin domain of the Mailbox being validated
+     * @param _mailbox The address of the Mailbox being validated, as bytes32
+     * @param _root The merkle root that the validator is attesting to
+     * @param _index The message count that the validator is attesting to
+     * @param _signatures 65-byte ECDSA validator signatures
+     * @return Addresses of the validators that signed
+     */
+    function recoverValidatorsFromSignatures(
+        uint32 _domain,
+        bytes32 _mailbox,
+        bytes32 _root,
+        uint32 _index,
+        bytes[] calldata _signatures
+    ) external returns (address[] memory);
+
 }
 ```
 
