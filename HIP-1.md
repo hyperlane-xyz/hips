@@ -51,7 +51,7 @@ interface IInterchainSecurityModule {
 
 Message `recipients` should specify their `ISM` via the `interchainSecurityModule()` view function.
 
-```
+```solidity
 interface ISpecifiesInterchainSecurityModule {
     /**
      * @notice Returns the ISM to use for this recipient of interchain messages.
