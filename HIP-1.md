@@ -25,7 +25,7 @@ Sovereign consensus is powered by `Interchain Security Modules` or `ISMs`, which
 
 `ISMs` must implement the folling interface:
 
-```
+```solidity
 interface IInterchainSecurityModule {
     /**
      * @notice Returns an enum that represents the type of security model
