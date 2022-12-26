@@ -65,7 +65,6 @@ function verify(bytes calldata _metadata, bytes calldata _message)
     uint8 _metadataThreshold = _metadata.threshold();
     address[] memory _metadataValidators = _metadata.validators();
 
-    bytes32 _metadataCommitment = keccak256
     bytes32 _metadataCommitment = keccak256(
         abi.encodePacked(_metadataThreshold, _metadataValidators)
     );
