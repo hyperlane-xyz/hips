@@ -28,22 +28,19 @@ The validator announcement protocol relies on validators signing attestations wi
 
 The Hyperlane validator binary should sign the following data upon startup.
 
-```
+```solidity
 /**
  * @notice Returns the digest that Hyperlane validators should sign to support
  * the announcement protocol
  * @param _domain The origin domain of the Mailbox being validated
  * @param _mailbox The address of the Mailbox being validated, as bytes32
- * @param _storageType An enum representing the modality used to store
- * signed checkpoints (e.g. AWS S3)
  * @param _storageMetadata Information encoding the location of signed
- * checkpoints, specific to the storage modaility (e.g. S3 bucket URL)
+ * checkpoints, specific to the storage modality (e.g. S3 bucket URL)
  * @return The digest to EIP-191 sign
  */
 function getDigestToSign(
     uint32 _domain,
     bytes32 _mailbox,
-    uint8 _storageType,
     bytes calldata _storageMetadata
 )
     external
@@ -53,17 +50,17 @@ function getDigestToSign(
     bytes32 _domainHash = keccak256(
         abi.encodePacked(_domain, _mailbox, "HYPERLANE")
     );
-    return keccak256(abi.encodePacked(_domainHash, _storageType, _storageMetadata));
+    return keccak256(abi.encodePacked(_domainHash, _storageMetadata));
 }
 ```
 
 #### Storage types
 
-To be forward compatible with alternative storage modalities, the announcement protocol includes a "storage type" parameter.
+To be forward compatible with alternative storage modalities, the announcement protocol includes a `storageType` parameter, encoded as the first byte of `_storageMetadata`.
 
 Upon adoption, the only supported storage type will be AWS S3, which has `storageType == 1`.
 
-For the S3 type, `_storageMetadata` should be the base64-encoded URL of the S3 bucket.
+For the S3 type, the remaining `_storageMetadata` should be the base64-encoded URL of the S3 bucket.
 
 Future storage types may be proposed in future HIPs. The content of `_storageMetadata` is expected to vary by type.
 
@@ -75,7 +72,7 @@ This contract stores validator registrations for that chain and mailbox contract
 
 Validators for that domain and mailbox contract should register themselves so that they are discoverable by relayers.
 
-```
+```solidity
 interface IValidatorRegistry {
     /// @notice Returns the local domain for validator registrations
     function localDomain() external view returns (uint32);
@@ -89,23 +86,17 @@ interface IValidatorRegistry {
     /**
      * @notice Returns a list of all registrations for all provided validators
      * @param _validators The list of validators to get registrations for
-     * @return A list of validator addresses, and registered storage types and
-     * metadata. Note that the validators return value will only match
-     * _validators when each validator in _validators has exactly one
-     * registration.
+     * @return A list of validator addresses and registered storage metadata
      */
     function getValidatorRegistrations(
         address[] calldata _validators,
     ) external view returns (
         address[] memory validators,
-        uint8[] memory storageTypes,
-        bytes[] memory storageMetadata
+        bytes[][] memory storageMetadata
     );
 
    /**
     * @notice Registers a validator
-    * @param _storageType An enum representing the modality used to store
-    * signed checkpoints (e.g. AWS S3)
     * @param _storageMetadata Information encoding the location of signed
     * checkpoints, specific to the storage modaility (e.g. S3 bucket URL)
     * @param _signature The validator announcement attestation previously
@@ -113,7 +104,6 @@ interface IValidatorRegistry {
     * @returns True upon success
     */
     function registerValidator(
-        uint8 _storageType,
         bytes calldata _storageMetadata
         bytes calldata _signature
     ) external returns (bool);
@@ -122,9 +112,9 @@ interface IValidatorRegistry {
 
 ### **Rationale**
 
-#### Registration of multiple storage types
+#### Registration of multiple storage locations
 
-This proposal allows validators to register multiple storage types.
+This proposal allows validators to register multiple storage locations.
 
 Validators may choose to post their signed checkpoints in multiple locations (e.g. S3, GCP, IPFS) in order to maximize liveness.
 
