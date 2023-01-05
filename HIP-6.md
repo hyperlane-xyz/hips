@@ -41,7 +41,7 @@ The Hyperlane validator binary should sign the following data upon startup.
 function getDigestToSign(
     uint32 _domain,
     bytes32 _mailbox,
-    bytes calldata _storageMetadata
+    string calldata _storageMetadata
 )
     external
     pure
@@ -54,15 +54,18 @@ function getDigestToSign(
 }
 ```
 
-#### Storage types
+#### Storage metadata
 
-To be forward compatible with alternative storage modalities, the announcement protocol includes a `storageType` parameter, encoded as the first byte of `_storageMetadata`.
+To be forward compatible with alternative storage modalities, the announcement protocol accepts arbitrary strings as metadata.
 
-Upon adoption, the only supported storage type will be AWS S3, which has `storageType == 1`.
+However, in order to this metadata to be understood by relayers, a common standard should be adopted for each storage modality supported by relayers.
 
-For the S3 type, the remaining `_storageMetadata` should be the base64-encoded URL of the S3 bucket.
+The modalities currently supported are local storage and AWS S3. Their storage metadata formats should be, respectively:
 
-Future storage types may be proposed in future HIPs. The content of `_storageMetadata` is expected to vary by type.
+> "file://{path_to_file}"
+> "s3://{bucket_name}/{bucket_region}"
+
+Future storage modalities should be announced using the "{modality_type}://" format.
 
 #### ValidatorRegistry
 
@@ -92,19 +95,19 @@ interface IValidatorRegistry {
         address[] calldata _validators,
     ) external view returns (
         address[] memory validators,
-        bytes[][] memory storageMetadata
+        string[][] memory storageMetadata
     );
 
    /**
     * @notice Registers a validator
     * @param _storageMetadata Information encoding the location of signed
-    * checkpoints, specific to the storage modaility (e.g. S3 bucket URL)
-    * @param _signature The validator announcement attestation previously
-    * specified in this HIP
+    * checkpoints
+    * @param _signature The signed validator announcement attestation
+    * previously specified in this HIP
     * @returns True upon success
     */
     function registerValidator(
-        bytes calldata _storageMetadata
+        string calldata _storageMetadata
         bytes calldata _signature
     ) external returns (bool);
 }
