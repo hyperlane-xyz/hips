@@ -34,14 +34,14 @@ The Hyperlane validator binary should sign the following data upon startup and w
  * the announcement protocol
  * @param _domain The origin domain of the Mailbox being validated
  * @param _mailbox The address of the Mailbox being validated, as bytes32
- * @param _storageMetadata Information encoding the location of signed
+ * @param _storageLocation Information encoding the location of signed
  * checkpoints, specific to the storage modality (e.g. S3 bucket URL)
  * @return The digest to EIP-191 sign
  */
 function getDigestToSign(
     uint32 _domain,
     bytes32 _mailbox,
-    string calldata _storageMetadata
+    string calldata _storageLocation
 )
     external
     pure
@@ -50,64 +50,62 @@ function getDigestToSign(
     bytes32 _domainHash = keccak256(
         abi.encodePacked(_domain, _mailbox, "HYPERLANE")
     );
-    return keccak256(abi.encodePacked(_domainHash, _storageMetadata));
+    return keccak256(abi.encodePacked(_domainHash, _storageLocation));
 }
 ```
 
-#### Storage metadata
+#### Storage locations
 
-To be forward compatible with alternative storage modalities, the announcement protocol accepts arbitrary strings as metadata.
+To be forward compatible with alternative storage modalities, the announcement protocol accepts arbitrary strings as storage locations.
 
-However, in order to this metadata to be understood by relayers, a common standard should be adopted for each storage modality supported by relayers.
+However, in order to this string to be understood by relayers, a common standard should be adopted for each storage modality supported by relayers.
 
-The modalities currently supported are local storage and AWS S3. Their storage metadata formats should be, respectively:
+The modalities currently supported are local storage and AWS S3. Their storage location formats should be, respectively:
 
 > "file://{path_to_file}"
 > "s3://{bucket_name}/{bucket_region}"
 
 Future storage modalities should be announced using the "{modality_type}://" format.
 
-#### ValidatorRegistry
+#### ValidatorAnnounce
 
-A contract that implements the `IValidatorRegistry` interface should be deployed to each chain.
+A contract that implements the `IValidatorAnnounce` interface should be deployed to each chain.
 
-This contract stores validator registrations for that chain and mailbox contract.
+This contract stores validator storage locations for that chain and mailbox contract.
 
-Validators for that domain and mailbox contract should register themselves so that they are discoverable by relayers.
+Validators for that domain and mailbox contract should announce themselves so that they are discoverable by relayers.
 
 ```solidity
-interface IValidatorRegistry {
-    /// @notice Returns the local domain for validator registrations
+interface IValidatorAnnounce {
+    /// @notice Returns the local domain for validator announcements
     function localDomain() external view returns (uint32);
 
-    /// @notice Returns the mailbox contract for validator registrations
+    /// @notice Returns the mailbox contract for validator announcements
     function mailbox() external view returns (address);
 
-    /// @notice Returns a list of validators that have registered
-    function validators() external view returns (address[] memory);
+    /// @notice Returns a list of validators that have made announcements
+    function getAnnouncedValidators() external view returns (address[] memory);
 
     /**
-     * @notice Returns a list of all registrations for all provided validators
-     * @param _validators The list of validators to get registrations for
-     * @return A list of validator addresses and registered storage metadata
+     * @notice Returns a list of all announced storage locations for `validators`
+     * @param _validators The list of validators to get storage locations for
+     * @return A list of announced storage locations
      */
-    function getValidatorRegistrations(
-        address[] calldata _validators,
-    ) external view returns (
-        address[] memory validators,
-        string[][] memory storageMetadata
-    );
+    function getAnnouncedStorageLocations(address[] calldata _validators)
+        external
+        view
+        returns (string[][] memory);
 
-   /**
-    * @notice Registers a validator
-    * @param _storageMetadata Information encoding the location of signed
-    * checkpoints
-    * @param _signature The signed validator announcement attestation
-    * previously specified in this HIP
-    * @returns True upon success
-    */
-    function registerValidator(
-        string calldata _storageMetadata
+    /**
+     * @notice Announces a validator signature storage location
+     * @param _storageLocation Information encoding the location of signed
+     * checkpoints
+     * @param _signature The signed validator announcement
+     * @return True upon success
+     */
+    function announce(
+        address _validator,
+        string calldata _storageLocation,
         bytes calldata _signature
     ) external returns (bool);
 }
@@ -117,23 +115,23 @@ interface IValidatorRegistry {
 
 #### Registration of multiple storage locations
 
-This proposal allows validators to register multiple storage locations.
+This proposal allows validators to announce multiple storage locations.
 
 Validators may choose to post their signed checkpoints in multiple locations (e.g. S3, GCP, IPFS) in order to maximize liveness.
 
 #### Deregistration
 
-For simplicity, this proposal intentionally omits the ability to deregister a storage modality.
+For simplicity, this proposal intentionally omits the ability to remove a storage location.
 
-Relayers can optionally blacklist registered validators if they discover them to no longer be signing checkpoints.
+Relayers can optionally blacklist validators if they discover them to no longer be signing checkpoints.
 
 ### **Backwards Compatibility**
 
-This HIP is backwards compatible, validators can register themselves at any time.
+This HIP is backwards compatible, validators can announce themselves at any time.
 
-Eventually, relayers may choose to stop supporting unregistered validators.
+Eventually, relayers may choose to stop supporting validators that have not announced their storage locations.
 
-At this point, validators would need to register in order to make meaningful contributions to securing Hyperlane.
+At this point, validators would need to announce themselves in order to make meaningful contributions to securing Hyperlane.
 
 ### **Security Considerations**
 
