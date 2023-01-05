@@ -26,7 +26,7 @@ The validator announcement protocol relies on validators signing attestations wi
 
 > "Checkpoints for the mailbox contract with address _m_ on chain _d_, signed by the validator with address _v_, can be found at location _l_
 
-The Hyperlane validator binary should sign the following data upon startup.
+The Hyperlane validator binary should sign the following data upon startup and write it to the storage modality in `announcement.json`.
 
 ```solidity
 /**
