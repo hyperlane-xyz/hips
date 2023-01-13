@@ -141,11 +141,9 @@ contract IsmFeeQuotingIgp {
 
 The off-chain relayer relating to a `FeeQuotingIgp` will index `GasPayment` events and relate them to dispatched messages based off their message ID. Because the `FeeQuotingIgp` will revert if there was insufficient payment, all `GasPayment` events relate to messages that have fully paid for an amount of gas, and the relayer will honor these payments.
 
-Note that calldata costs for processing the message are not explicitly calculated by the fee quoting IGP. The maximum Hyperlane message size is 2 KiB, or 2048 bytes. Currently, the Ethereum calldata gas cost is 16 gas per non-zero byte, which comes out to a maximum of `32,768` gas. To avoid an additional required mapping in the InterchainGasCalculator of remote domain to the cost per byte of calldata, a flat cost of 32,000 gas to cover potential calldata costs is charged.
+Note that calldata costs for processing the message are not explicitly calculated by the fee quoting IGP. The maximum Hyperlane message size is 2 KiB, or 2048 bytes. Currently, the Ethereum calldata gas cost is 16 gas per non-zero byte, which comes out to a maximum of `32,768` gas. To avoid an additional required mapping in the InterchainGasCalculator of remote domain to the cost per byte of calldata, a flat cost of 33,000 gas to cover potential calldata costs is charged.
 
 ### **Rationale**
-
-#### Default vs non-default ISM distinction
 
 #### ISM-specific fee quoting IGPs
 
