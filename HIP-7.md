@@ -39,7 +39,7 @@ Procedure
 - The ownership of ownable_B will be transferred to K_agg.localICA() after being instantiated on ICARouter_B.handle()
 - K_agg will call ICARouter_A.callRemote({(dest_B, callParams_b),(dest_C, callParams_C)}) with batch of transactions which will be delivered to chain B, chain C, etc with their respective callParams.
   - For sending multiple destinations in the same callRemote call, we'll need the adapt the callRemote to loop through the destinations and send the transactions one by one.
-- Sign the address is derived from ISM_B, changing the ISM will mean ownership change of all subseqeunt ownable_B contracts
+- Since the address is derived from ISM_B, changing the ISM will mean ownership change of all subseqeunt ownable_B contracts
 - ISM_B cannot contain PausableISM as it will be impossible to unpause the contract
 - A malicious majority of signers can sign the transfer ownership of ownable_B to a malicious address (security is dependent on the ISM_B which will multisig on chain B)
   - If we can alleviate this by using the native bridges or zkLightClient like zeth
@@ -89,11 +89,24 @@ Deploying the full safe suite of services which include:
 - full infra picture: https://github.com/safe-global/safe-infrastructure
 - this is more of a separate product on its own and we can revisit this in the future if needed by partners
 
+**Recommendation**: Use `InterchainAccount`for now and revisit this in the future if needed by partners.
+
 ### **Scope**
 
-- Contract changes (ICA)
-- ICA deployer (sdk+cli)
-- checker/governor queue transactions for the safe
+- Contract changes (`InterchainAccountRouter`)
+  - minor: add sending msg.value with calls
+- While deploying
+
+  - cli: ask if they wan to use ICA or separate owners for the ownable contracts
+    - "home" chain -> this?
+  - deploy ICA router on requested connections chainA -> chainB, chainC, etc
+  - restrict PausableISM, otherwise can use the defaultISM
+  - deploy ICA account, set as owner in config and set as owner of ownable contracts as last step
+
+- Post deploying
+  - add to governor to be enqueued as submissionType.SAFE transactions
+    - determine what chains can be passed through which safe
+  - check status of governance messages (optional)
 
 ### **Further questions**
 
