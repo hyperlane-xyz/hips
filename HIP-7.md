@@ -17,11 +17,11 @@ When deploying Hyperlane to a long-tail chain, one often runs into the question 
 
 ### **Goal**
 
-- minimize f(x), f(x) = Σ||sig_i(AUTH_CALL) - sig_0(AUTH_CALL)||_0, ie minimize the number of actions or signatures taking place outside your home chain.
+- minimize f(x), f(x) = Σ||sig_i(AUTH_CALL) - sig_0(AUTH_CALL)||\_0, ie minimize the number of actions or signatures taking place outside your home chain.
 - simplicity, minimizing the number of additional deployment and maintainence burden
-- (nice to have) 
-    - subject to equal soundness property: if the multsig participants cannot sign on chain A, then they shouldn't be able to sign on chain B either.
-    - liveness: ∀ T ∈ valid transactions, ∃ subset S' of S such that |S'| >= n and ∀ signer ∈ S', eventually signer signs T, then T is eventually executed.
+- (nice to have)
+  - subject to equal soundness property: if the multsig participants cannot sign on chain A, then they shouldn't be able to sign on chain B either.
+  - liveness: ∀ T ∈ valid transactions, ∃ subset S' of S such that |S'| >= n and ∀ signer ∈ S', eventually signer signs T, then T is eventually executed.
 
 **Stakeholders**
 
@@ -69,9 +69,10 @@ Pros:
 
 Cons:
 
-- Needs an additional offchain Hyperlane Safe Services which will store the signatures for the multisig calls and gets the per-destination-chain message and metadata when fetched from the respective ISM through CCIP read interface.
+- Needs an additional offchain Hyperlane Safe Services which will store the signatures for the multisig calls and gets the per-destination-chain message and metadata when fetched from the respective ISM through CCIP read interface. This will scale up in complexity as we add more chains and will need to be maintained.
 
 #### Use AA-style solutions
+
 (Privy, Pimlico, ZeroDev, Capsule, Portal, etc)
 
 Uses shamir secret sharing to split the private key of the multisig participants and use the threshold signature scheme to sign the transactions. The threshold signature scheme will be implemented in the SSSISM contract.
@@ -79,11 +80,20 @@ Uses shamir secret sharing to split the private key of the multisig participants
 - Most of the AA wallet style solutions are ERC-4337 compatible which has a lot of bells and whistles which we don't need like GasPaymaster API, Bundle API, etc.
 - For access control, it's meant to be more hierarchical like 2/3 but the two are the two different devices and a third is a backup from their servers which is an additional dependency. Not ideal for our use since it may be stored in iframe.
 
+#### Deploy Safe SDK on chain B
+
+Deploying the full safe suite of services which include:
+
+- safe transaction service: Keeps track of transactions related to Safe contracts and collects and relays offchain signatures back to the contract
+- safe apps service: keeps track of all supported networks
+- full infra picture: https://github.com/safe-global/safe-infrastructure
+- this is more of a separate product on its own and we can revisit this in the future if needed by partners
+
 ### **Scope**
 
 - Contract changes (ICA)
 - ICA deployer (sdk+cli)
-- checker/governor queue transactions for the safe 
+- checker/governor queue transactions for the safe
 
 ### **Further questions**
 
