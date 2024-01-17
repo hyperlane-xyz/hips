@@ -2,23 +2,19 @@
 | --- | ----------------------------------------------- | ------ | ---------- | ---------- |
 | 7   | Draft multisig transactions on long-tail chains | Draft  | aroralanuk | 2024-01-10 |
 
-### **Brief Summary / Abstract**
-
-> "Uh, open up the safe, bitches got a lot to say" - Iggy Azalea
-
 ### **Motivation**
 
-When deploying Hyperlane to a long-tail chain, one often runs into the question of ownership of critical roles like proxyAdmin owner, mailbox owner or warp route owner. On fat head chains, the Gnosis Safe SDK's governor tooling is present to support multisig operations but their lack of supprt on the long-tail means we need to deploy the safe SDK adhoc as we're doing the bridge deployment. This is the not the best experience from the deployer perspective and risky as we may need to blind sign and manually submit the transactions.
+When deploying Hyperlane to a long-tail chain, one often runs into the question of ownership of critical roles like proxyAdmin owner, mailbox owner or warp route owner. On core chains, the Gnosis Safe SDK's governor tooling is present to support multisig operations but their lack of supprt on the long-tail means we need to deploy the safe SDK adhoc as we're doing the bridge deployment. This is the not the best experience from the deployer perspective and risky as we may need to blind sign and manually submit the transactions.
 
 ### **Definition**
 
-- Chain A: chain where the multisig tooling is adequately supported (like Ethereum Mainnet) which has n multisig participants with public keys pk_1, pk_2, pk_3, ..., pk_n and aggregation public key K_agg . The relevant contracts are mailbox_A, proxyAdmin_A, hypToken_A, etc or referred to ownable_A generally.
+- Chain A: chain where the multisig tooling is adequately supported (like Ethereum Mainnet) which has n multisig participants with public keys $pk_1, pk_2, pk_3, ..., pk_n$ and aggregation public key $K_agg$. The relevant contracts are mailbox_A, proxyAdmin_A, hypToken_A, etc or referred to ownable_A generally.
 - Chain B: chain where the multisig tooling isn't supported like HarryPotterObamaSonicInu chain which the core hyperlane contract deployments. The relevant contracts are mailbox_B, proxyAdmin_B, hypToken_B, etc or referred to ownable_B generally.
 
 ### **Goal**
 
 - minimize f(x), f(x) = Σ||sig_i(AUTH_CALL) - sig_0(AUTH_CALL)||\_0, ie minimize the number of actions or signatures taking place outside your home chain.
-- simplicity, minimizing the number of additional deployment and maintainence burden
+- simplicity, minimizing the number of additional deployment and maintenance burden
 - (nice to have)
   - subject to equal soundness property: if the multsig participants cannot sign on chain A, then they shouldn't be able to sign on chain B either.
   - liveness: ∀ T ∈ valid transactions, ∃ subset S' of S such that |S'| >= n and ∀ signer ∈ S', eventually signer signs T, then T is eventually executed.
@@ -110,7 +106,9 @@ Deploying the full safe suite of services which include:
   - move governor to CLI, make configuration change, make required changes on the fork tests
 
 - Post deploying
+
   - add to governor to be enqueued as submissionType.SAFE transactions
+
     - determine what chains can be passed through which safe
     - ICA proxied state submission, run the checker again chainB, with the additional knowledge the governor sees the violation, pass ICA call on chainA
     - add new union type LOCAL or REMOTE (address or ICA object)
