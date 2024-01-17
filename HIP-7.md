@@ -27,6 +27,11 @@ When deploying Hyperlane to a long-tail chain, one often runs into the question 
 
 - Internal operations for transferring ownership, upgrading contracts, etc.
 - Long-tail chain teams like Manta, HarryPotterObamaSonicInu chains you would like to have ownable without the hassle.
+- Pick the same hub?
+  - eg for injective chain which is a rollup on Arbitrum, hub is arbitrum?
+  - for AW, hub will be ethereum mainnet
+  - version of service is different on different chains
+  - scroll, moonbeam, celo, etc which be moved from forked safe to mainnet safe
 
 ### **Options**
 
@@ -55,7 +60,7 @@ Cons:
 
 #### Use `SafeISM`
 
-- The multisig signers pk_1, pk_2, pk_3, ..., pk_n will serve as the signers for the SafeISM on chain B and we can queue the transactions and check the ecdsa signatures in the SafeISM contract. The recipient will be ICA account which will call the intended governable function on the ownable_B contract (msg.sender is ICA_B).
+- The multisig signers `pk_1, pk_2, pk_3, ..., pk_n will serve as the signers for the SafeISM on chain B and we can queue the transactions and check the ecdsa signatures in the SafeISM contract. The recipient will be ICA account which will call the intended governable function on the ownable_B contract (msg.sender is ICA_B).
 - Each signer key pk_i will sign the ({B, ICA_B.call()[]}, {C, ICA_B.call()[]}) and submit it to Hyperlane transaction services which the queries by the SafeISM which is CCIPReadIsm and uses the following:
 
   - msg: {B,ICA_B.call()[]}, metadata: ({C, ICA_B.call()[]}, signatures: {sig_1, sig_2, sig_3, ..., sig_t})
@@ -102,10 +107,14 @@ Deploying the full safe suite of services which include:
   - deploy ICA router on requested connections chainA -> chainB, chainC, etc
   - restrict PausableISM, otherwise can use the defaultISM
   - deploy ICA account, set as owner in config and set as owner of ownable contracts as last step
+  - move governor to CLI, make configuration change, make required changes on the fork tests
 
 - Post deploying
   - add to governor to be enqueued as submissionType.SAFE transactions
     - determine what chains can be passed through which safe
+    - ICA proxied state submission, run the checker again chainB, with the additional knowledge the governor sees the violation, pass ICA call on chainA
+    - add new union type LOCAL or REMOTE (address or ICA object)
+
   - check status of governance messages (optional)
 
 ### **Further questions**
